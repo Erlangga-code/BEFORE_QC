@@ -2,6 +2,8 @@ import streamlit as st
 import pandas as pd
 import sqlite3
 from datetime import datetime
+import matplotlib.pyplot as plt
+import io
 
 # 1. KONEKSI DATABASE
 conn = sqlite3.connect("qc_data.db", check_same_thread=False)
@@ -31,34 +33,12 @@ LIST_PART = [
 
 st.set_page_config(page_title="QC Input Real-Time", layout="wide")
 
-# Script capture layar menggunakan html2canvas yang diarahkan ke id "tabel-rekap"
 st.markdown("""
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script>
-    function gasScreenshot() {
-        var element = document.getElementById('tabel-rekap');
-        if(element) {
-            html2canvas(element, {
-                backgroundColor: '#111111',
-                scale: 2, // Biar hasil gambar tajam tidak pecah
-                logging: false
-            }).then(function(canvas) {
-                var link = document.createElement('a');
-                link.download = 'REKAP_BEFORE_CEK_QC.png';
-                link.href = canvas.toDataURL('image/png');
-                link.click();
-            });
-        } else {
-            alert('Gagal mengambil data tabel, silahkan coba lagi.');
-        }
-    }
-    </script>
     <style>
     .block-container {
         padding-top: 1.5rem !important;
         padding-bottom: 1rem !important;
     }
-    /* Style Tabel HTML biar mirip Excel Premium */
     .table-responsive {
         width: 100%;
         overflow-x: auto;
@@ -88,25 +68,9 @@ st.markdown("""
         border: 1px solid #333;
         text-align: center;
     }
-    /* Warna Status Text */
     .text-merah { color: #FF4B4B !important; font-weight: bold; font-style: italic; }
     .text-hijau { color: #00D26A !important; font-weight: bold; font-style: italic; }
     .text-kuning { color: #FFCC00 !important; font-weight: bold; font-style: italic; }
-    
-    /* Tombol SS Besar */
-    .btn-ss {
-        background-color: #075E54 !important;
-        color: white !important;
-        font-weight: bold !important;
-        border: none !important;
-        padding: 12px;
-        width: 100%;
-        border-radius: 6px;
-        font-size: 16px;
-        cursor: pointer;
-        margin-top: 15px;
-        margin-bottom: 15px;
-    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -137,7 +101,7 @@ with tab1:
             st.success("Berhasil Tersimpan!")
 
 # ==========================================
-# TAB 2: MONITORING & REKAP (HTML VERSION)
+# TAB 2: MONITORING & REKAP (FUNGSI GAMBAR)
 # ==========================================
 with tab2:
     df = pd.read_sql_query("SELECT id, tanggal, nama_part, qty, keterangan, area FROM transaksi_qc ORDER BY id ASC", conn)
@@ -178,44 +142,108 @@ with tab2:
         
         filter_angka = st.checkbox("🔍 Hanya Tampilkan Data Berangka (Siap Share WA)", value=False)
         
-        # BUAT STRUKTUR TABEL KUSTOM VIA HTML
-        html_tabel = f"<div class='table-responsive' id='tabel-rekap'><table class='custom-table'>"
+        # 1. TAMPILAN TABEL DI WEB (HTML)
+        html_tabel = f"<div class='table-responsive'><table class='custom-table'>"
         html_tabel += "<thead><tr><th>NAMA PART</th>"
         for tgl in kolom_tanggal_5_hari:
             html_tabel += f"<th>{tgl}</th>"
         html_tabel += "<th>KETERANGAN</th><th>AREA</th></tr></thead><tbody>"
         
+        data_untuk_gambar = []
         ada_data_tampil = False
+        
         for _, r in df_final.iterrows():
-            # Perbaikan pengecekan angka harian agar sinkron dengan filter checkbox
             punya_angka = any([not pd.isna(r[tgl]) and r[tgl] != "-" for tgl in kolom_tanggal_5_hari])
             if filter_angka and not punya_angka:
                 continue
                 
             ada_data_tampil = True
             
-            # Tentukan warna teks berdasarkan area
             if r['area'] == "QC PRODUKSI & WAREHOUSE": kelas_warna = "text-kuning"
             elif r['area'] == "QC PRODUKSI": kelas_warna = "text-merah"
             else: kelas_warna = "text-hijau"
             
             html_tabel += f"<tr><td class='{kelas_warna}' style='text-align:left;'>{r['nama_part']}</td>"
             
+            baris_gambar = [r['nama_part']]
             for tgl in kolom_tanggal_5_hari:
                 val = r[tgl]
                 val_str = f"{int(val)}" if (not pd.isna(val) and val != "-") else "-"
                 html_tabel += f"<td>{val_str}</td>"
+                baris_gambar.append(val_str)
                 
             html_tabel += f"<td>{r['keterangan']}</td><td class='{kelas_warna}'>{r['area']}</td></tr>"
+            
+            baris_gambar.append(r['keterangan'])
+            baris_gambar.append(r['area'])
+            data_untuk_gambar.append(baris_gambar)
             
         html_tabel += "</tbody></table></div>"
         
         if ada_data_tampil:
-            # Tampilkan tabel kustom ke layar web
             st.markdown(html_tabel, unsafe_allow_html=True)
             
-            # TOMBOL SCREENSHOT ASLI
-            st.markdown('<button class="btn-ss" onclick="gasScreenshot()">📸 AMBIL SCREENSHOT MONITORING</button>', unsafe_allow_html=True)
+            # ==========================================
+            # GENERATE GAMBAR PNG VIA MATPLOTLIB (SERVER SIDE)
+            # ==========================================
+            kolom_gambar = ['NAMA PART'] + kolom_tanggal_5_hari + ['KETERANGAN', 'AREA']
+            
+            # Atur ukuran gambar agar pas memanjang ke samping (tidak terpotong)
+            fig, ax = plt.subplots(figsize=(12, len(data_untuk_gambar) * 0.5 + 1.5))
+            fig.patch.set_facecolor('#111111')
+            ax.set_facecolor('#111111')
+            ax.axis('off')
+            ax.axis('tight')
+            
+            tabel_plot = ax.table(
+                cellText=data_untuk_gambar, 
+                colLabels=kolom_gambar, 
+                loc='center', 
+                cellLoc='center'
+            )
+            
+            tabel_plot.auto_set_font_size(False)
+            tabel_plot.set_fontsize(11)
+            tabel_plot.scale(1.2, 1.8) # Ukuran sel tabel agar longgar dan rapi
+            
+            # Beri warna style tabel matplotlib agar sama persis dengan tema web
+            for (row, col), cell in tabel_plot.get_celld().items():
+                cell.set_edgecolor('#333333')
+                if row == 0:
+                    cell.set_text_props(color='#FFCC00', weight='bold')
+                    cell.set_facecolor('#1E1E1E')
+                else:
+                    cell.set_facecolor('#111111')
+                    cell.set_text_props(color='white')
+                    
+                    # Cek kolom pertama (Nama Part) atau terakhir (Area) untuk diwarnai
+                    area_val = data_untuk_gambar[row-1][-1]
+                    if col == 0:
+                        cell.set_text_props(alignment='left')
+                        
+                    if col == 0 or col == len(kolom_gambar)-1:
+                        if area_val == "QC PRODUKSI & WAREHOUSE":
+                            cell.set_text_props(color='#FFCC00', weight='bold', style='italic')
+                        elif area_val == "QC PRODUKSI":
+                            cell.set_text_props(color='#FF4B4B', weight='bold', style='italic')
+                        else:
+                            cell.set_text_props(color='#00D26A', weight='bold', style='italic')
+            
+            # Simpan gambar ke memori buffer
+            buf = io.BytesIO()
+            plt.savefig(buf, format='png', bbox_inches='tight', dpi=200, facecolor=fig.get_facecolor(), edgecolor='none')
+            buf.seek(0)
+            plt.close(fig)
+            
+            # TOMBOL DOWNLOAD ASLI STREAMLIT (100% BEKERJA DI HP)
+            st.write("")
+            st.download_button(
+                label="📥 DOWNLOAD GAMBAR REKAP (SIAP SHARE WA)",
+                data=buf,
+                file_name=f"REKAP_QC_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png",
+                mime="image/png",
+                use_container_width=True
+            )
         else:
             st.info("Tidak ada data berangka untuk ditampilkan dengan filter aktif.")
 
