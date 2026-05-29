@@ -24,11 +24,13 @@ def buat_tabel():
 
 buat_tabel()
 
-# Daftar part lengkap
+# Daftar part lengkap (Sudah termasuk barang baru)
 LIST_PART = [
     "Casing Cap", "Bolt Rear", "Reinf 2PK-F4766-00", 
     "Boss Footrest 5BP", "REINF - BDJ-F4766", 
-    "PLATE BOLT - KW2504", "BRACKET SEAT L - BDJ-F4718", "INSERT BRACKET STOPPER"
+    "PLATE BOLT - KW2504", "BRACKET SEAT L - BDJ-F4718", "INSERT BRACKET STOPPER",
+    "CCG", "SPROCKET CC", "BRACKET SEAT R - BDJ-F4728", "HINGE SEAT 1FD",
+    "REINF-1WD", "REINF-B3M", "BRACKET SEAT 671", "BRACKET BRA"
 ]
 
 st.set_page_config(page_title="QC Input Real-Time", layout="wide")
@@ -184,38 +186,28 @@ with tab2:
             st.markdown(html_tabel, unsafe_allow_html=True)
             
             # ==========================================
-            # GENERATE GAMBAR PNG VIA MATPLOTLIB (WITH HEADER)
+            # GENERATE GAMBAR PNG VIA MATPLOTLIB
             # ==========================================
             kolom_gambar = ['NAMA PART'] + kolom_tanggal_5_hari + ['KETERANGAN', 'AREA']
             
-            # Membuat figure dengan tambahan ruang di atas untuk area Header
-            tinggi_gambar = len(data_untuk_gambar) * 0.5 + 2.5
+            tinggi_gambar = len(data_untuk_gambar) * 0.5 + 2.0
             fig, ax = plt.subplots(figsize=(12, tinggi_gambar))
             fig.patch.set_facecolor('#111111')
             ax.set_facecolor('#111111')
             ax.axis('off')
             
-            # Menambahkan Judul Header "BEFORE CEK QC" di bagian atas gambar
+            # Header diatur kembali ke "BEFORE CEK QC" dengan warna PUTIH (#FFFFFF)
             plt.text(
-                0.5, 0.94, 'BEFORE CEK QC', 
-                color='#FFCC00', fontsize=20, weight='bold', 
+                0.5, 0.92, 'BEFORE CEK QC', 
+                color='#FFFFFF', fontsize=20, weight='bold', 
                 ha='center', va='center', transform=ax.transAxes
             )
             
-            # Menambahkan sub-header info tanggal cetak real-time
-            tgl_sekarang = datetime.now().strftime('%d-%b-%Y %H:%M')
-            plt.text(
-                0.5, 0.88, f'Data Terkumpul s/d: {tgl_sekarang} WIB', 
-                color='#AAAAAA', fontsize=10, style='italic',
-                ha='center', va='center', transform=ax.transAxes
-            )
-            
-            # Menggambar tabel di bawah area judul header
             tabel_plot = ax.table(
                 cellText=data_untuk_gambar, 
                 colLabels=kolom_gambar, 
-                loc='bottom', # Set ke bawah untuk memberikan ruang bagi judul text di atas
-                bbox=[0, 0, 1, 0.82], # Mengatur posisi kotak tabel agar pas di area bawah
+                loc='bottom',
+                bbox=[0, 0, 1, 0.84], 
                 cellLoc='center'
             )
             
@@ -248,7 +240,6 @@ with tab2:
             buf.seek(0)
             plt.close(fig)
             
-            # TOMBOL DOWNLOAD ASLI STREAMLIT
             st.write("")
             st.download_button(
                 label="📥 DOWNLOAD GAMBAR REKAP (SIAP SHARE WA)",
