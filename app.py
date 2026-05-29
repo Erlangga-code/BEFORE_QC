@@ -187,9 +187,9 @@ with tab2:
         
         ada_data_tampil = False
         for _, r in df_final.iterrows():
-            # Logika filter angka harian
-            punya_angka = any([not pd.isna(r[tgl]) for tgl in kolom_tanggal_5_hari])
-            if filter_angka and not i_punya_angka:
+            # Perbaikan pengecekan angka harian agar sinkron dengan filter checkbox
+            punya_angka = any([not pd.isna(r[tgl]) and r[tgl] != "-" for tgl in kolom_tanggal_5_hari])
+            if filter_angka and not punya_angka:
                 continue
                 
             ada_data_tampil = True
@@ -214,18 +214,16 @@ with tab2:
             # Tampilkan tabel kustom ke layar web
             st.markdown(html_tabel, unsafe_allow_html=True)
             
-            # TOMBOL SCREENSHOT ASLI (SEKARANG DIJAMIN MUNCUL DI BAWAH TABEL)
+            # TOMBOL SCREENSHOT ASLI
             st.markdown('<button class="btn-ss" onclick="gasScreenshot()">📸 AMBIL SCREENSHOT MONITORING</button>', unsafe_allow_html=True)
         else:
             st.info("Tidak ada data berangka untuk ditampilkan dengan filter aktif.")
 
-        # AREA RESET
-        st.markdown("---")
-        if st.button("🗑️ Kosongkan Seluruh Tabel Monitoring"):
-            cursor.execute("DROP TABLE IF EXISTS transaksi_qc")
-            conn.commit()
-            buat_tabel()
-            st.success("Tabel dibersihkan!")
-            st.rerun()
-    else:
-        st.info("Belum ada data transaksi. Silakan isi form terlebih dahulu.")
+# AREA RESET
+    st.markdown("---")
+    if st.button("🗑️ Kosongkan Seluruh Tabel Monitoring"):
+        cursor.execute("DROP TABLE IF EXISTS transaksi_qc")
+        conn.commit()
+        buat_tabel()
+        st.success("Tabel dibersihkan!")
+        st.rerun()
