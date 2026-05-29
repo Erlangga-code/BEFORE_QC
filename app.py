@@ -184,11 +184,10 @@ with tab2:
             st.markdown(html_tabel, unsafe_allow_html=True)
             
             # ==========================================
-            # GENERATE GAMBAR PNG VIA MATPLOTLIB (SERVER SIDE)
+            # GENERATE GAMBAR PNG VIA MATPLOTLIB
             # ==========================================
             kolom_gambar = ['NAMA PART'] + kolom_tanggal_5_hari + ['KETERANGAN', 'AREA']
             
-            # Atur ukuran gambar agar pas memanjang ke samping (tidak terpotong)
             fig, ax = plt.subplots(figsize=(12, len(data_untuk_gambar) * 0.5 + 1.5))
             fig.patch.set_facecolor('#111111')
             ax.set_facecolor('#111111')
@@ -204,9 +203,8 @@ with tab2:
             
             tabel_plot.auto_set_font_size(False)
             tabel_plot.set_fontsize(11)
-            tabel_plot.scale(1.2, 1.8) # Ukuran sel tabel agar longgar dan rapi
+            tabel_plot.scale(1.2, 1.8)
             
-            # Beri warna style tabel matplotlib agar sama persis dengan tema web
             for (row, col), cell in tabel_plot.get_celld().items():
                 cell.set_edgecolor('#333333')
                 if row == 0:
@@ -216,10 +214,10 @@ with tab2:
                     cell.set_facecolor('#111111')
                     cell.set_text_props(color='white')
                     
-                    # Cek kolom pertama (Nama Part) atau terakhir (Area) untuk diwarnai
                     area_val = data_untuk_gambar[row-1][-1]
                     if col == 0:
-                        cell.set_text_props(alignment='left')
+                        # Perbaikan: Menggunakan 'horizontalalignment' agar sesuai aturan Matplotlib
+                        cell.set_text_props(horizontalalignment='left')
                         
                     if col == 0 or col == len(kolom_gambar)-1:
                         if area_val == "QC PRODUKSI & WAREHOUSE":
@@ -229,13 +227,12 @@ with tab2:
                         else:
                             cell.set_text_props(color='#00D26A', weight='bold', style='italic')
             
-            # Simpan gambar ke memori buffer
             buf = io.BytesIO()
             plt.savefig(buf, format='png', bbox_inches='tight', dpi=200, facecolor=fig.get_facecolor(), edgecolor='none')
             buf.seek(0)
             plt.close(fig)
             
-            # TOMBOL DOWNLOAD ASLI STREAMLIT (100% BEKERJA DI HP)
+            # TOMBOL DOWNLOAD ASLI STREAMLIT
             st.write("")
             st.download_button(
                 label="📥 DOWNLOAD GAMBAR REKAP (SIAP SHARE WA)",
