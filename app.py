@@ -184,26 +184,43 @@ with tab2:
             st.markdown(html_tabel, unsafe_allow_html=True)
             
             # ==========================================
-            # GENERATE GAMBAR PNG VIA MATPLOTLIB
+            # GENERATE GAMBAR PNG VIA MATPLOTLIB (WITH HEADER)
             # ==========================================
             kolom_gambar = ['NAMA PART'] + kolom_tanggal_5_hari + ['KETERANGAN', 'AREA']
             
-            fig, ax = plt.subplots(figsize=(12, len(data_untuk_gambar) * 0.5 + 1.5))
+            # Membuat figure dengan tambahan ruang di atas untuk area Header
+            tinggi_gambar = len(data_untuk_gambar) * 0.5 + 2.5
+            fig, ax = plt.subplots(figsize=(12, tinggi_gambar))
             fig.patch.set_facecolor('#111111')
             ax.set_facecolor('#111111')
             ax.axis('off')
-            ax.axis('tight')
             
+            # Menambahkan Judul Header "BEFORE CEK QC" di bagian atas gambar
+            plt.text(
+                0.5, 0.94, 'BEFORE CEK QC', 
+                color='#FFCC00', fontsize=20, weight='bold', 
+                ha='center', va='center', transform=ax.transAxes
+            )
+            
+            # Menambahkan sub-header info tanggal cetak real-time
+            tgl_sekarang = datetime.now().strftime('%d-%b-%Y %H:%M')
+            plt.text(
+                0.5, 0.88, f'Data Terkumpul s/d: {tgl_sekarang} WIB', 
+                color='#AAAAAA', fontsize=10, style='italic',
+                ha='center', va='center', transform=ax.transAxes
+            )
+            
+            # Menggambar tabel di bawah area judul header
             tabel_plot = ax.table(
                 cellText=data_untuk_gambar, 
                 colLabels=kolom_gambar, 
-                loc='center', 
+                loc='bottom', # Set ke bawah untuk memberikan ruang bagi judul text di atas
+                bbox=[0, 0, 1, 0.82], # Mengatur posisi kotak tabel agar pas di area bawah
                 cellLoc='center'
             )
             
             tabel_plot.auto_set_font_size(False)
             tabel_plot.set_fontsize(11)
-            tabel_plot.scale(1.2, 1.8)
             
             for (row, col), cell in tabel_plot.get_celld().items():
                 cell.set_edgecolor('#333333')
@@ -216,7 +233,6 @@ with tab2:
                     
                     area_val = data_untuk_gambar[row-1][-1]
                     if col == 0:
-                        # Perbaikan: Menggunakan 'horizontalalignment' agar sesuai aturan Matplotlib
                         cell.set_text_props(horizontalalignment='left')
                         
                     if col == 0 or col == len(kolom_gambar)-1:
@@ -237,7 +253,7 @@ with tab2:
             st.download_button(
                 label="📥 DOWNLOAD GAMBAR REKAP (SIAP SHARE WA)",
                 data=buf,
-                file_name=f"REKAP_QC_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png",
+                file_name=f"REKAP_BEFORE_QC_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png",
                 mime="image/png",
                 use_container_width=True
             )
