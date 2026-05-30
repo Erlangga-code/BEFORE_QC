@@ -4,6 +4,7 @@ import sqlite3
 from datetime import datetime
 import matplotlib.pyplot as plt
 import io
+import textwrap
 
 # 1. KONEKSI DATABASE
 conn = sqlite3.connect("qc_data.db", check_same_thread=False)
@@ -24,7 +25,7 @@ def buat_tabel():
 
 buat_tabel()
 
-# Daftar part lengkap (Sudah termasuk barang baru)
+# Daftar part lengkap
 LIST_PART = [
     "Casing Cap", "Bolt Rear", "Reinf 2PK-F4766-00", 
     "Boss Footrest 5BP", "REINF - BDJ-F4766", 
@@ -167,7 +168,13 @@ with tab2:
             
             html_tabel += f"<tr><td class='{kelas_warna}' style='text-align:left;'>{r['nama_part']}</td>"
             
-            baris_gambar = [r['nama_part']]
+            # Siapkan baris untuk penampung teks gambar
+            # Lakukan wrapping text otomatis (maksimal lebar karakter tertentu sebelum potong baris baru)
+            part_wrapped = "\n".join(textwrap.wrap(str(r['nama_part']), width=24))
+            ket_wrapped = "\n".join(textwrap.wrap(str(r['keterangan']), width=22))
+            area_wrapped = "\n".join(textwrap.wrap(str(r['area']), width=15))
+            
+            baris_gambar = [part_wrapped]
             for tgl in kolom_tanggal_5_hari:
                 val = r[tgl]
                 val_str = f"{int(val)}" if (not pd.isna(val) and val != "-") else "-"
@@ -176,8 +183,8 @@ with tab2:
                 
             html_tabel += f"<td>{r['keterangan']}</td><td class='{kelas_warna}'>{r['area']}</td></tr>"
             
-            baris_gambar.append(r['keterangan'])
-            baris_gambar.append(r['area'])
+            baris_gambar.append(ket_wrapped)
+            baris_gambar.append(area_wrapped)
             data_untuk_gambar.append(baris_gambar)
             
         html_tabel += "</tbody></table></div>"
@@ -186,28 +193,39 @@ with tab2:
             st.markdown(html_tabel, unsafe_allow_html=True)
             
             # ==========================================
-            # GENERATE GAMBAR PNG VIA MATPLOTLIB
+            # GENERATE GAMBAR PNG VIA MATPLOTLIB (SANGAT RAPI)
             # ==========================================
             kolom_gambar = ['NAMA PART'] + kolom_tanggal_5_hari + ['KETERANGAN', 'AREA']
             
-            tinggi_gambar = len(data_untuk_gambar) * 0.5 + 2.0
-            fig, ax = plt.subplots(figsize=(12, tinggi_gambar))
+            # Hitung jumlah baris data nyata untuk mengatur tinggi gambar secara dinamis
+            total_baris_data = len(data_untuk_gambar)
+            tinggi_gambar = total_baris_data * 0.8 + 2.0  # Ditambah space baris agar kotak lebih tinggi vertikal
+            
+            fig, ax = plt.subplots(figsize=(14, tinggi_gambar)) # Diperlebar ke 14 inch agar lega horizontal
             fig.patch.set_facecolor('#111111')
             ax.set_facecolor('#111111')
             ax.axis('off')
             
-            # Header diatur kembali ke "BEFORE CEK QC" dengan warna PUTIH (#FFFFFF)
+            # Judul Utama
             plt.text(
-                0.5, 0.92, 'BEFORE CEK QC', 
-                color='#FFFFFF', fontsize=20, weight='bold', 
+                0.5, 0.94, 'BEFORE CEK QC', 
+                color='#FFFFFF', fontsize=22, weight='bold', 
                 ha='center', va='center', transform=ax.transAxes
             )
+            
+            # Set Rasio Lebar Kolom secara Eksplisit (Column Widths)
+            # Memberikan porsi lebih besar untuk part (26%) dan keterangan (22%), sisanya dibagi rata ke tanggal dan area
+            jumlah_kolom_tgl = len(kolom_tanggal_5_hari)
+            lebar_kolom_tgl = 0.38 / jumlah_kolom_tgl # Sisa space 38% dibagi rata untuk kolom tanggal
+            
+            custom_col_widths = [0.26] + [lebar_kolom_tgl] * jumlah_kolom_tgl + [0.22, 0.14]
             
             tabel_plot = ax.table(
                 cellText=data_untuk_gambar, 
                 colLabels=kolom_gambar, 
+                colWidths=custom_col_widths,
                 loc='bottom',
-                bbox=[0, 0, 1, 0.84], 
+                bbox=[0, 0, 1, 0.86], 
                 cellLoc='center'
             )
             
@@ -216,6 +234,9 @@ with tab2:
             
             for (row, col), cell in tabel_plot.get_celld().items():
                 cell.set_edgecolor('#333333')
+                # Tambahkan padding/margin internal dalam kotak cell agar teks berjarak aman dari garis tepi
+                cell.set_text_props(linespacing=1.3) 
+                
                 if row == 0:
                     cell.set_text_props(color='#FFCC00', weight='bold')
                     cell.set_facecolor('#1E1E1E')
@@ -223,14 +244,17 @@ with tab2:
                     cell.set_facecolor('#111111')
                     cell.set_text_props(color='white')
                     
-                    area_val = data_untuk_gambar[row-1][-1]
+                    area_val_raw = df_final.iloc[row-1]['area']
+                    
+                    # Kolom Nama Part diatur rata kiri (Left) biar kelihatan rapi saat teks membungkus
                     if col == 0:
                         cell.set_text_props(horizontalalignment='left')
                         
+                    # Pewarnaan teks khusus kolom Nama Part (kolom 0) dan Area (kolom terakhir)
                     if col == 0 or col == len(kolom_gambar)-1:
-                        if area_val == "QC PRODUKSI & WAREHOUSE":
+                        if area_val_raw == "QC PRODUKSI & WAREHOUSE":
                             cell.set_text_props(color='#FFCC00', weight='bold', style='italic')
-                        elif area_val == "QC PRODUKSI":
+                        elif area_val_raw == "QC PRODUKSI":
                             cell.set_text_props(color='#FF4B4B', weight='bold', style='italic')
                         else:
                             cell.set_text_props(color='#00D26A', weight='bold', style='italic')
