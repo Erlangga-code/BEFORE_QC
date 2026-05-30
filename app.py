@@ -153,6 +153,7 @@ with tab2:
         html_tabel += "<th>KETERANGAN</th><th>AREA</th></tr></thead><tbody>"
         
         data_untuk_gambar = []
+        warna_area_per_baris = []  # List baru untuk menyimpan history warna asli per baris data nyata
         ada_data_tampil = False
         
         for _, r in df_final.iterrows():
@@ -168,8 +169,7 @@ with tab2:
             
             html_tabel += f"<tr><td class='{kelas_warna}' style='text-align:left;'>{r['nama_part']}</td>"
             
-            # Siapkan baris untuk penampung teks gambar
-            # Lakukan wrapping text otomatis (maksimal lebar karakter tertentu sebelum potong baris baru)
+            # Lakukan wrapping text otomatis untuk cell gambar
             part_wrapped = "\n".join(textwrap.wrap(str(r['nama_part']), width=24))
             ket_wrapped = "\n".join(textwrap.wrap(str(r['keterangan']), width=22))
             area_wrapped = "\n".join(textwrap.wrap(str(r['area']), width=15))
@@ -187,37 +187,35 @@ with tab2:
             baris_gambar.append(area_wrapped)
             data_untuk_gambar.append(baris_gambar)
             
+            # Kunci status area murni dari baris data yang lolos filter
+            warna_area_per_baris.append(str(r['area']))
+            
         html_tabel += "</tbody></table></div>"
         
         if ada_data_tampil:
             st.markdown(html_tabel, unsafe_allow_html=True)
             
             # ==========================================
-            # GENERATE GAMBAR PNG VIA MATPLOTLIB (SANGAT RAPI)
+            # GENERATE GAMBAR PNG VIA MATPLOTLIB
             # ==========================================
             kolom_gambar = ['NAMA PART'] + kolom_tanggal_5_hari + ['KETERANGAN', 'AREA']
             
-            # Hitung jumlah baris data nyata untuk mengatur tinggi gambar secara dinamis
             total_baris_data = len(data_untuk_gambar)
-            tinggi_gambar = total_baris_data * 0.8 + 2.0  # Ditambah space baris agar kotak lebih tinggi vertikal
+            tinggi_gambar = total_baris_data * 0.8 + 2.0  
             
-            fig, ax = plt.subplots(figsize=(14, tinggi_gambar)) # Diperlebar ke 14 inch agar lega horizontal
+            fig, ax = plt.subplots(figsize=(14, tinggi_gambar)) 
             fig.patch.set_facecolor('#111111')
             ax.set_facecolor('#111111')
             ax.axis('off')
             
-            # Judul Utama
             plt.text(
                 0.5, 0.94, 'BEFORE CEK QC', 
                 color='#FFFFFF', fontsize=22, weight='bold', 
                 ha='center', va='center', transform=ax.transAxes
             )
             
-            # Set Rasio Lebar Kolom secara Eksplisit (Column Widths)
-            # Memberikan porsi lebih besar untuk part (26%) dan keterangan (22%), sisanya dibagi rata ke tanggal dan area
             jumlah_kolom_tgl = len(kolom_tanggal_5_hari)
-            lebar_kolom_tgl = 0.38 / jumlah_kolom_tgl # Sisa space 38% dibagi rata untuk kolom tanggal
-            
+            lebar_kolom_tgl = 0.38 / jumlah_kolom_tgl 
             custom_col_widths = [0.26] + [lebar_kolom_tgl] * jumlah_kolom_tgl + [0.22, 0.14]
             
             tabel_plot = ax.table(
@@ -234,7 +232,6 @@ with tab2:
             
             for (row, col), cell in tabel_plot.get_celld().items():
                 cell.set_edgecolor('#333333')
-                # Tambahkan padding/margin internal dalam kotak cell agar teks berjarak aman dari garis tepi
                 cell.set_text_props(linespacing=1.3) 
                 
                 if row == 0:
@@ -244,19 +241,19 @@ with tab2:
                     cell.set_facecolor('#111111')
                     cell.set_text_props(color='white')
                     
-                    area_val_raw = df_final.iloc[row-1]['area']
+                    # Ambil nilai area yang tepat berdasarkan urutan baris data nyata di gambar
+                    area_val_real = warna_area_per_baris[row - 1]
                     
-                    # Kolom Nama Part diatur rata kiri (Left) biar kelihatan rapi saat teks membungkus
                     if col == 0:
                         cell.set_text_props(horizontalalignment='left')
                         
-                    # Pewarnaan teks khusus kolom Nama Part (kolom 0) dan Area (kolom terakhir)
-                    if col == 0 or col == len(kolom_gambar)-1:
-                        if area_val_raw == "QC PRODUKSI & WAREHOUSE":
+                    # Warnai kolom NAMA PART (0) dan AREA (terakhir) secara akurat
+                    if col == 0 or col == len(kolom_gambar) - 1:
+                        if area_val_real == "QC PRODUKSI & WAREHOUSE":
                             cell.set_text_props(color='#FFCC00', weight='bold', style='italic')
-                        elif area_val_raw == "QC PRODUKSI":
+                        elif area_val_real == "QC PRODUKSI":
                             cell.set_text_props(color='#FF4B4B', weight='bold', style='italic')
-                        else:
+                        elif area_val_real == "WAREHOUSE":
                             cell.set_text_props(color='#00D26A', weight='bold', style='italic')
             
             buf = io.BytesIO()
