@@ -153,7 +153,7 @@ with tab2:
         html_tabel += "<th>KETERANGAN</th><th>AREA</th></tr></thead><tbody>"
         
         data_untuk_gambar = []
-        warna_area_per_baris = []  # List baru untuk menyimpan history warna asli per baris data nyata
+        warna_area_per_baris = []  
         ada_data_tampil = False
         
         for _, r in df_final.iterrows():
@@ -187,7 +187,7 @@ with tab2:
             baris_gambar.append(area_wrapped)
             data_untuk_gambar.append(baris_gambar)
             
-            # Kunci status area murni dari baris data yang lolos filter
+            # Kunci status area murni dari baris data yang lolos filter ke list eksternal
             warna_area_per_baris.append(str(r['area']))
             
         html_tabel += "</tbody></table></div>"
@@ -234,20 +234,21 @@ with tab2:
                 cell.set_edgecolor('#333333')
                 cell.set_text_props(linespacing=1.3) 
                 
+                # BAGIAN FIX WARNA HEADER GAMBAR
                 if row == 0:
-                    cell.set_text_props(color='#111111', weight='bold')
-                    cell.set_facecolor('#FFCC00')
+                    cell.set_text_props(color='#111111', weight='bold') # Tulisan judul jadi HITAM PEKAT
+                    cell.set_facecolor('#FFCC00') # Background Kotak jadi KUNING MENYALA
                 else:
                     cell.set_facecolor('#111111')
                     cell.set_text_props(color='white')
                     
-                    # Ambil nilai area yang tepat berdasarkan urutan baris data nyata di gambar
+                    # Ambil nilai area asli berdasarkan urutan baris hasil filter
                     area_val_real = warna_area_per_baris[row - 1]
                     
                     if col == 0:
                         cell.set_text_props(horizontalalignment='left')
                         
-                    # Warnai kolom NAMA PART (0) dan AREA (terakhir) secara akurat
+                    # Warnai tulisan Nama Part dan Area secara dinamis
                     if col == 0 or col == len(kolom_gambar) - 1:
                         if area_val_real == "QC PRODUKSI & WAREHOUSE":
                             cell.set_text_props(color='#FFCC00', weight='bold', style='italic')
