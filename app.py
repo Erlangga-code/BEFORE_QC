@@ -234,9 +234,9 @@ with tab2:
                 cell.set_edgecolor('#333333')
                 cell.set_text_props(linespacing=1.3) 
                 
-               if row == 0:
-                    cell.set_text_props(color='#111111', weight='bold') # Teks jadi hitam pekat
-                    cell.set_facecolor('#FFCC00') # Background jadi blok kuning penuh
+                if row == 0:
+                    cell.set_text_props(color='#FFCC00', weight='bold')
+                    cell.set_facecolor('#1E1E1E')
                 else:
                     cell.set_facecolor('#111111')
                     cell.set_text_props(color='white')
