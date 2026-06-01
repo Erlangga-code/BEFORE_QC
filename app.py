@@ -1,149 +1,282 @@
 import streamlit as st
 import pandas as pd
+import sqlite3
+from datetime import datetime
+import matplotlib.pyplot as plt
+import io
+import textwrap
 
-# 1. CONFIG HALAMAN & STYLE (Tema Gelap sesuai Screenshot)
+# 1. KONEKSI DATABASE
+conn = sqlite3.connect("qc_data.db", check_same_thread=False)
+cursor = conn.cursor()
+
+def buat_tabel():
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS transaksi_qc (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        tanggal TEXT,
+        nama_part TEXT,
+        qty INTEGER,
+        keterangan TEXT,
+        area TEXT
+    )
+    """)
+    conn.commit()
+
+buat_tabel()
+
+# Daftar part lengkap
+LIST_PART = [
+    "Casing Cap", "Bolt Rear", "Reinf 2PK-F4766-00", 
+    "Boss Footrest 5BP", "REINF - BDJ-F4766", 
+    "PLATE BOLT - KW2504", "BRACKET SEAT L - BDJ-F4718", "INSERT BRACKET STOPPER",
+    "CCG", "SPROCKET CC", "BRACKET SEAT R - BDJ-F4728", "HINGE SEAT 1FD",
+    "REINF-1WD", "REINF-B3M", "BRACKET SEAT 671", "BRACKET BRA"
+]
+
 st.set_page_config(page_title="QC Input Real-Time", layout="wide")
 
 st.markdown("""
     <style>
-    .block-container { padding-top: 1.5rem !important; }
-    /* Styling Tabel ala Dark Mode Pabrik */
-    .table-qc { width: 100%; border-collapse: collapse; margin-top: 15px; background-color: #111111; }
-    .table-qc th { background-color: #1A1A1A; color: #FFCC00; padding: 12px; border: 1px solid #333; text-align: center; font-weight: bold; }
-    .table-qc td { padding: 12px; border: 1px solid #333; text-align: center; font-weight: bold; }
-    .text-bolt { color: #FF4D4D; font-style: italic; }
-    .text-bracket { color: #FFCC00; font-style: italic; }
-    .text-insert { color: #00D26A; font-style: italic; }
-    .area-prod { color: #FF4D4D; font-style: italic; font-weight: bold; }
-    .area-both { color: #FFCC00; font-style: italic; font-weight: bold; }
-    .area-wh { color: #00D26A; font-style: italic; font-weight: bold; }
+    .block-container {
+        padding-top: 1.5rem !important;
+        padding-bottom: 1rem !important;
+    }
+    .table-responsive {
+        width: 100%;
+        overflow-x: auto;
+        background-color: #111111;
+        padding: 10px;
+        border-radius: 8px;
+    }
+    .custom-table {
+        width: 100%;
+        border-collapse: collapse;
+        color: white;
+        font-family: sans-serif;
+        font-size: 14px;
+        min-width: 800px;
+    }
+    .custom-table th {
+        background-color: #1E1E1E;
+        color: #FFCC00;
+        font-weight: bold;
+        text-align: center;
+        padding: 12px 8px;
+        border: 1px solid #333;
+        text-transform: uppercase;
+    }
+    .custom-table td {
+        padding: 10px 8px;
+        border: 1px solid #333;
+        text-align: center;
+    }
+    .text-merah { color: #FF4B4B !important; font-weight: bold; font-style: italic; }
+    .text-hijau { color: #00D26A !important; font-weight: bold; font-style: italic; }
+    .text-kuning { color: #FFCC00 !important; font-weight: bold; font-style: italic; }
     </style>
     """, unsafe_allow_html=True)
 
-# 2. INISIALISASI SESSION STATE (Penyimpanan Data Sementara)
-if 'data_qc' not in st.session_state:
-    st.session_state.data_qc = pd.DataFrame([
-        {"NAMA PART": "Casing Cap", "02-Jun-26": "-", "03-Jun-26": "-", "KETERANGAN": "-", "AREA": "QC PRODUKSI"},
-        {"NAMA PART": "Bolt Rear", "02-Jun-26": "384", "03-Jun-26": "-", "KETERANGAN": "BEFORE CEK QC", "AREA": "QC PRODUKSI"},
-        {"NAMA PART": "Reinf 2PK-F4766-00", "02-Jun-26": "-", "03-Jun-26": "-", "KETERANGAN": "-", "AREA": "QC PRODUKSI"},
-        {"NAMA PART": "Boss Footrest 5BP", "02-Jun-26": "-", "03-Jun-26": "-", "KETERANGAN": "-", "AREA": "QC PRODUKSI"},
-        {"NAMA PART": "REINF - BDJ-F4766", "02-Jun-26": "-", "03-Jun-26": "-", "KETERANGAN": "-", "AREA": "QC PRODUKSI"},
-        {"NAMA PART": "PLATE BOLT - KW2504", "02-Jun-26": "-", "03-Jun-26": "-", "KETERANGAN": "-", "AREA": "QC PRODUKSI"},
-        {"NAMA PART": "BRACKET SEAT L - BDJ-F4718", "02-Jun-26": "-", "03-Jun-26": "2000", "KETERANGAN": "1000 DI WAREHOUSE, 1000 IN QC", "AREA": "QC PRODUKSI & WAREHOUSE"},
-        {"NAMA PART": "INSERT BRACKET STOPPER", "02-Jun-26": "2945", "03-Jun-26": "-", "KETERANGAN": "WAREHOUSE", "AREA": "WAREHOUSE"},
-        {"NAMA PART": "CCG", "02-Jun-26": "-", "03-Jun-26": "-", "KETERANGAN": "-", "AREA": "QC PRODUKSI"},
-        {"NAMA PART": "SPROCKET CC", "02-Jun-26": "-", "03-Jun-26": "-", "KETERANGAN": "-", "AREA": "QC PRODUKSI"},
-        {"NAMA PART": "BRACKET SEAT R - BDJ-F4728", "02-Jun-26": "-", "03-Jun-26": "-", "KETERANGAN": "-", "AREA": "QC PRODUKSI"},
-        {"NAMA PART": "HINGE SEAT 1FD", "02-Jun-26": "-", "03-Jun-26": "-", "KETERANGAN": "-", "AREA": "QC PRODUKSI"},
-        {"NAMA PART": "REINF-1WD", "02-Jun-26": "-", "03-Jun-26": "-", "KETERANGAN": "-", "AREA": "QC PRODUKSI"},
-        {"NAMA PART": "REINF-B3M", "02-Jun-26": "-", "03-Jun-26": "-", "KETERANGAN": "-", "AREA": "QC PRODUKSI"},
-        {"NAMA PART": "BRACKET SEAT 671", "02-Jun-26": "-", "03-Jun-26": "-", "KETERANGAN": "-", "AREA": "QC PRODUKSI"},
-        {"NAMA PART": "BRACKET BRA", "02-Jun-26": "-", "03-Jun-26": "-", "KETERANGAN": "-", "AREA": "QC PRODUKSI"},
-    ])
+st.title("📊 BEFORE CEK QC")
 
-# 3. MEMBUAT NAVIGASI TAB UTAMA
-tab1, tab2 = st.tabs(["📝 INPUT LAPANGAN", "📊 MONITORING & REKAP"])
+tab1, tab2 = st.tabs(["📝 INPUT LAPANGAN", "🖥️ MONITORING & REKAP"])
 
 # ==========================================
-# TAB 1: FORM INPUT LAPANGAN (PRODUKSI/QC)
+# TAB 1: FORM INPUT LAPANGAN
 # ==========================================
 with tab1:
-    st.header("📋 Form Input Aktual Before QC")
-    
-    with st.form("form_qc"):
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            part_pilihan = st.selectbox("Pilih Nama Part:", st.session_state.data_qc["NAMA PART"].unique())
-        with col2:
-            tanggal_pilihan = st.selectbox("Pilih Tanggal Aktual:", ["03-Jun-26", "02-Jun-26"])
-        with col3:
-            qty_input = st.number_input("Jumlah Qty (Pcs):", min_value=0, step=1, value=0)
-            
-        col4, col5 = st.columns(2)
-        with col4:
-            keterangan_input = st.text_input("Keterangan Status Lokasi:", placeholder="Contoh: 1000 DI WAREHOUSE, 1000 IN QC")
-        with col5:
-            area_input = st.selectbox("Penempatan Area:", ["QC PRODUKSI", "QC PRODUKSI & WAREHOUSE", "WAREHOUSE"])
-            
-        tombol_simpan = st.form_submit_button("💾 Update Data ke Tabel")
+    st.subheader("Form Operator Lapangan")
+    with st.form(key="form_qc", clear_on_submit=True):
+        input_tgl = st.date_input("Tanggal", datetime.now())
+        input_part = st.selectbox("Nama Part", LIST_PART)
+        input_qty = st.number_input("Quantity (Qty) Baru Masuk", min_value=1, step=1, value=1)
+        input_ket = st.text_input("Keterangan (Catatan)", placeholder="Ketik catatan di sini...")
+        input_area = st.selectbox("Area Posisi Barang", ["QC PRODUKSI", "WAREHOUSE", "QC PRODUKSI & WAREHOUSE"])
         
-        if tombol_simpan:
-            idx = st.session_state.data_qc[st.session_state.data_qc["NAMA PART"] == part_pilihan].index[0]
-            st.session_state.data_qc.at[idx, tanggal_pilihan] = str(qty_input) if qty_input > 0 else "-"
-            st.session_state.data_qc.at[idx, "KETERANGAN"] = keterangan_input if keterangan_input else "-"
-            st.session_state.data_qc.at[idx, "AREA"] = area_input
-            st.success(f"✅ Data {part_pilihan} Berhasil Diperbarui!")
-            st.rerun()
+        submit_button = st.form_submit_button(label="🚀 Simpan Data")
+        if submit_button:
+            keterangan_capslock = input_ket.upper().strip()
+            cursor.execute("""
+                INSERT INTO transaksi_qc (tanggal, nama_part, qty, keterangan, area)
+                VALUES (?, ?, ?, ?, ?)
+            """, (input_tgl.strftime("%Y-%m-%d"), input_part, input_qty, keterangan_capslock, input_area))
+            conn.commit()
+            st.success("Berhasil Tersimpan!")
 
 # ==========================================
-# TAB 2: MONITORING TABLE & DOWNLOAD IMAGE
+# TAB 2: MONITORING & REKAP (FUNGSI GAMBAR)
 # ==========================================
 with tab2:
-    st.title("📊 BEFORE CEK QC")
+    df = pd.read_sql_query("SELECT id, tanggal, nama_part, qty, keterangan, area FROM transaksi_qc ORDER BY id ASC", conn)
     
-    col_filter1, col_filter2 = st.columns([2, 1])
-    with col_filter1:
-        tanggal_hari_ini = st.selectbox("📅 Pilih Tanggal Hari Ini (Aktual):", ["03-Jun-26", "02-Jun-26"])
-    with col_filter2:
-        st.write("")
-        st.write("")
-        filter_aktif = st.checkbox("🔍 Hanya Tampilkan Data Berangka", value=True)
+    if not df.empty:
+        df['tanggal_dt'] = pd.to_datetime(df['tanggal'])
+        df['tanggal_format'] = df['tanggal_dt'].dt.strftime('%d-%b-%y')
         
-    # Salin data asli untuk difilter
-    df_tampil = st.session_state.data_qc.copy()
-    
-    if filter_aktif:
-        # LOGIKA SESUAI PERMINTAANMAS ERLANGGA:
-        # Muncul kalau tanggal hari ini ADA QTY-nya (bukan "-")
-        df_tampil = df_tampil[(df_tampil[tanggal_hari_ini] != "-") & (df_tampil[tanggal_hari_ini] != "0") & (df_tampil[tanggal_hari_ini] != "")]
+        df_pivot = df.pivot_table(index='nama_part', columns='tanggal_format', values='qty', aggfunc='sum').reset_index()
         
-    # GENERATE HTML TABLE UNTUK TAMPILAN MATANG SIAP SHARE WA
-    html_table = f"<table class='table-qc'><thead><tr><th>NAMA PART</th><th>02-Jun-26</th><th>03-Jun-26</th><th>KETERANGAN</th><th>AREA</th></tr></thead><tbody>"
-    
-    if df_tampil.empty:
-        html_table += f"<tr><td colspan='5' style='color: #888; text-align: center; padding: 20px;'>💡 Tidak ada input aktual / data baru pada tanggal {tanggal_hari_ini}</td></tr>"
-    else:
-        for _, r in df_tampil.iterrows():
-            # Set warna teks nama part
-            part_upper = str(r['NAMA PART']).upper()
-            if "BOLT" in part_upper:
-                cls_part = "text-bolt"
-            elif "BRACKET" in part_upper or "REINF" in part_upper:
-                cls_part = "text-bracket"
-            elif "INSERT" in part_upper:
-                cls_part = "text-insert"
-            else:
-                cls_part = "text-bolt"
+        def tentukan_status_area(nama_barang):
+            areas_terpakai = df[df['nama_part'] == nama_barang]['area'].unique()
+            if "QC PRODUKSI & WAREHOUSE" in areas_terpakai or ("QC PRODUKSI" in areas_terpakai and "WAREHOUSE" in areas_terpakai):
+                return "QC PRODUKSI & WAREHOUSE"
+            elif "QC PRODUKSI" in areas_terpakai:
+                return "QC PRODUKSI"
+            elif "WAREHOUSE" in areas_terpakai:
+                return "WAREHOUSE"
+            return "QC PRODUKSI"
+            
+        df_terakhir = df.groupby('nama_part').last().reset_index()
+        def ambil_keterangan_terbaru(nama_barang):
+            ket = df_terakhir[df_terakhir['nama_part'] == nama_barang]['keterangan'].values[0]
+            if pd.isna(ket) or str(ket).strip() == "": return "-"
+            return str(ket)
+
+        df_pivot['area'] = df_pivot['nama_part'].apply(tentukan_status_area)
+        df_pivot['keterangan'] = df_pivot['nama_part'].apply(ambil_keterangan_terbaru)
+        
+        df_master = pd.DataFrame(LIST_PART, columns=['nama_part'])
+        df_final = pd.merge(df_master, df_pivot, on='nama_part', how='left')
+        df_final['area'] = df_final['area'].fillna("QC PRODUKSI")
+        df_final['keterangan'] = df_final['keterangan'].fillna("-")
+        
+        semua_tanggal = [col for col in df_final.columns if col not in ['nama_part', 'area', 'keterangan']]
+        tanggal_diurutkan = sorted(semua_tanggal, key=lambda x: datetime.strptime(x, '%d-%b-%y'))
+        kolom_tanggal_5_hari = tanggal_diurutkan[-5:]
+        
+        filter_angka = st.checkbox("🔍 Hanya Tampilkan Data Berangka (Siap Share WA)", value=False)
+        
+        # 1. TAMPILAN TABEL DI WEB (HTML)
+        html_tabel = f"<div class='table-responsive'><table class='custom-table'>"
+        html_tabel += "<thead><tr><th>NAMA PART</th>"
+        for tgl in kolom_tanggal_5_hari:
+            html_tabel += f"<th>{tgl}</th>"
+        html_tabel += "<th>KETERANGAN</th><th>AREA</th></tr></thead><tbody>"
+        
+        data_untuk_gambar = []
+        ada_data_tampil = False
+        
+        # MENGUNCI TANGGAL PALING BARU (Paling Kanan)
+        tanggal_paling_baru = kolom_tanggal_5_hari[-1] if kolom_tanggal_5_hari else None
+        
+        for _, r in df_final.iterrows():
+            # LOGIKA FILTER YANG DIPERBAIKI: 
+            # Jika filter aktif, dicek HANYA pada tanggal paling baru. Jika kosong/"-", baris disembunyikan.
+            if filter_angka and tanggal_paling_baru:
+                val_terbaru = r[tanggal_paling_baru]
+                if pd.isna(val_terbaru) or val_terbaru == "-" or val_terbaru == "" or val_terbaru == 0:
+                    continue
                 
-            # Set warna teks area
-            area_upper = str(r['AREA']).upper()
-            if "WAREHOUSE" in area_upper and "PRODUKSI" in area_upper:
-                cls_area = "area-both"
-            elif "WAREHOUSE" in area_upper:
-                cls_area = "area-wh"
-            else:
-                cls_area = "area-prod"
+            ada_data_tampil = True
+            
+            if r['area'] == "QC PRODUKSI & WAREHOUSE": kelas_warna = "text-kuning"
+            elif r['area'] == "QC PRODUKSI": kelas_warna = "text-merah"
+            else: kelas_warna = "text-hijau"
+            
+            html_tabel += f"<tr><td class='{kelas_warna}' style='text-align:left;'>{r['nama_part']}</td>"
+            
+            part_wrapped = "\n".join(textwrap.wrap(str(r['nama_part']), width=24))
+            ket_wrapped = "\n".join(textwrap.wrap(str(r['keterangan']), width=22))
+            area_wrapped = "\n".join(textwrap.wrap(str(r['area']), width=15))
+            
+            baris_gambar = [part_wrapped]
+            for tgl in kolom_tanggal_5_hari:
+                val = r[tgl]
+                val_str = f"{int(val)}" if (not pd.isna(val) and val != "-") else "-"
+                html_tabel += f"<td>{val_str}</td>"
+                baris_gambar.append(val_str)
                 
-            html_table += f"""
-            <tr>
-                <td class='{cls_part}'>{r['NAMA PART']}</td>
-                <td style='color: white;'>{r['02-Jun-26']}</td>
-                <td style='color: white;'>{r['03-Jun-26']}</td>
-                <td style='color: white;'>{r['KETERANGAN']}</td>
-                <td class='{cls_area}'>{r['AREA']}</td>
-            </tr>
-            """
-    html_table += "</tbody></table>"
-    
-    st.markdown(html_table, unsafe_allow_html=True)
-    
-    st.write("")
-    if st.button("📸 DOWNLOAD GAMBAR REKAP (SIAP SHARE WA)", use_container_width=True):
-        st.info("Fitur auto-screenshot tabel aktif. Gambar otomatis tersimpan ke folder Download laptop Mas!")
+            html_tabel += f"<td>{r['keterangan']}</td><td class='{kelas_warna}'>{r['area']}</td></tr>"
+            
+            baris_gambar.append(ket_wrapped)
+            baris_gambar.append(area_wrapped)
+            data_untuk_gambar.append(baris_gambar)
+            
+        html_tabel += "</tbody></table></div>"
         
+        if ada_data_tampil:
+            st.markdown(html_tabel, unsafe_allow_html=True)
+            
+            # ==========================================
+            # GENERATE GAMBAR PNG VIA MATPLOTLIB (SANGAT RAPI)
+            # ==========================================
+            kolom_gambar = ['NAMA PART'] + kolom_tanggal_5_hari + ['KETERANGAN', 'AREA']
+            
+            total_baris_data = len(data_untuk_gambar)
+            tinggi_gambar = total_baris_data * 0.8 + 2.0
+            
+            fig, ax = plt.subplots(figsize=(14, tinggi_gambar))
+            fig.patch.set_facecolor('#111111')
+            ax.set_facecolor('#111111')
+            ax.axis('off')
+            
+            plt.text(
+                0.5, 0.94, 'BEFORE CEK QC', 
+                color='#FFFFFF', fontsize=22, weight='bold', 
+                ha='center', va='center', transform=ax.transAxes
+            )
+            
+            jumlah_kolom_tgl = len(kolom_tanggal_5_hari)
+            lebar_kolom_tgl = 0.38 / jumlah_kolom_tgl
+            
+            custom_col_widths = [0.26] + [lebar_kolom_tgl] * jumlah_kolom_tgl + [0.22, 0.14]
+            
+            tabel_plot = ax.table(
+                cellText=data_untuk_gambar, 
+                colLabels=kolom_gambar, 
+                colWidths=custom_col_widths,
+                loc='bottom',
+                bbox=[0, 0, 1, 0.86], 
+                cellLoc='center'
+            )
+            
+            tabel_plot.auto_set_font_size(False)
+            tabel_plot.set_fontsize(11)
+            
+            for (row, col), cell in tabel_plot.get_celld().items():
+                cell.set_edgecolor('#333333')
+                cell.set_text_props(linespacing=1.3) 
+                
+                if row == 0:
+                    cell.set_text_props(color='#FFCC00', weight='bold')
+                    cell.set_facecolor('#1E1E1E')
+                else:
+                    cell.set_facecolor('#111111')
+                    cell.set_text_props(color='white')
+                    
+                    area_val_raw = df_final.iloc[row-1]['area']
+                    
+                    if col == 0:
+                        cell.set_text_props(horizontalalignment='left')
+                        
+                    if col == 0 or col == len(kolom_gambar)-1:
+                        if area_val_raw == "QC PRODUKSI & WAREHOUSE":
+                            cell.set_text_props(color='#FFCC00', weight='bold', style='italic')
+                        elif area_val_raw == "QC PRODUKSI":
+                            cell.set_text_props(color='#FF4B4B', weight='bold', style='italic')
+                        else:
+                            cell.set_text_props(color='#00D26A', weight='bold', style='italic')
+            
+            buf = io.BytesIO()
+            plt.savefig(buf, format='png', bbox_inches='tight', dpi=200, facecolor=fig.get_facecolor(), edgecolor='none')
+            buf.seek(0)
+            plt.close(fig)
+            
+            st.write("")
+            st.download_button(
+                label="📥 DOWNLOAD GAMBAR REKAP (SIAP SHARE WA)",
+                data=buf,
+                file_name=f"REKAP_BEFORE_QC_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png",
+                mime=\"image/png\",
+                use_container_width=True
+            )
+        else:
+            st.info("Tidak ada data berangka untuk ditampilkan dengan filter aktif.")
+
+# AREA RESET
+    st.markdown("---")
     if st.button("🗑️ Kosongkan Seluruh Tabel Monitoring"):
-        for col in ["02-Jun-26", "03-Jun-26"]:
-            st.session_state.data_qc[col] = "-"
-        st.session_state.data_qc["KETERANGAN"] = "-"
-        st.success("Tabel berhasil dibersihkan!")
+        cursor.execute("DROP TABLE IF EXISTS transaksi_qc")
+        conn.commit()
+        buat_tabel()
+        st.success("Tabel dibersihkan!")
         st.rerun()
