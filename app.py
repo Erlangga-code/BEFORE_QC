@@ -155,12 +155,11 @@ with tab2:
         data_untuk_gambar = []
         ada_data_tampil = False
         
-        # MENGUNCI TANGGAL PALING BARU (Paling Kanan)
+        # MENENTUKAN TANGGAL PALING BARU (KOLOM PALING KANAN)
         tanggal_paling_baru = kolom_tanggal_5_hari[-1] if kolom_tanggal_5_hari else None
         
         for _, r in df_final.iterrows():
-            # LOGIKA FILTER YANG DIPERBAIKI: 
-            # Jika filter aktif, dicek HANYA pada tanggal paling baru. Jika kosong/"-", baris disembunyikan.
+            # PERBAIKAN LOGIKA FILTER: Hanya cek isi qty di tanggal paling baru (paling kanan)
             if filter_angka and tanggal_paling_baru:
                 val_terbaru = r[tanggal_paling_baru]
                 if pd.isna(val_terbaru) or val_terbaru == "-" or val_terbaru == "" or val_terbaru == 0:
@@ -197,7 +196,7 @@ with tab2:
             st.markdown(html_tabel, unsafe_allow_html=True)
             
             # ==========================================
-            # GENERATE GAMBAR PNG VIA MATPLOTLIB (SANGAT RAPI)
+            # GENERATE GAMBAR PNG VIA MATPLOTLIB
             # ==========================================
             kolom_gambar = ['NAMA PART'] + kolom_tanggal_5_hari + ['KETERANGAN', 'AREA']
             
@@ -266,7 +265,7 @@ with tab2:
                 label="📥 DOWNLOAD GAMBAR REKAP (SIAP SHARE WA)",
                 data=buf,
                 file_name=f"REKAP_BEFORE_QC_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png",
-                mime=\"image/png\",
+                mime="image/png",
                 use_container_width=True
             )
         else:
