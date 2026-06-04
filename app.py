@@ -6,7 +6,9 @@ import matplotlib.pyplot as plt
 import io
 import textwrap
 
-# 1. KONEKSI DATABASE
+# ==========================================
+# 1. KONEKSI & INISIALISASI DATABASE
+# ==========================================
 conn = sqlite3.connect("qc_data.db", check_same_thread=False)
 cursor = conn.cursor()
 
@@ -25,7 +27,7 @@ def buat_tabel():
 
 buat_tabel()
 
-# Daftar part lengkap
+# Master daftar part lengkap lapangan
 LIST_PART = [
     "Casing Cap", "Bolt Rear", "Reinf 2PK-F4766-00", 
     "Boss Footrest 5BP", "REINF - BDJ-F4766", 
@@ -36,6 +38,9 @@ LIST_PART = [
 
 st.set_page_config(page_title="QC Input Real-Time", layout="wide")
 
+# ==========================================
+# 2. CUSTOM STYLE CSS (DARK MODE TABLE STYLE)
+# ==========================================
 st.markdown("""
     <style>
     .block-container {
@@ -79,6 +84,7 @@ st.markdown("""
 
 st.title("📊 BEFORE CEK QC")
 
+# Pembagian navigasi menu utama
 tab1, tab_edit, tab2 = st.tabs(["📝 INPUT LAPANGAN", "✏️ EDIT & HAPUS DATA", "🖥️ MONITORING & REKAP"])
 
 # ==========================================
@@ -104,7 +110,7 @@ with tab1:
             st.success("Berhasil Tersimpan!")
 
 # ==========================================
-# 🛠️ TAB 2: EDIT & HAPUS DATA LAPANGAN (REVISI)
+# TAB 2: EDIT & HAPUS DATA LAPANGAN
 # ==========================================
 with tab_edit:
     st.subheader("✏️ Koreksi, Jadikan 0, atau Hapus Data")
@@ -131,11 +137,10 @@ with tab_edit:
             data_lama = df_filtered_edit[df_filtered_edit['id'] == id_target].iloc[0]
             default_date_obj = datetime.strptime(data_lama['tanggal'], "%Y-%m-%d").date()
             
-            # --- FORM EDIT (SEKARANG BISA INPUT 0) ---
+            # --- FORM EDIT ---
             st.write("### ⚙️ Opsi 1: Ganti Data / Ubah Qty Menjadi 0")
             with st.form(key="form_edit_proses"):
                 edit_tgl = st.date_input("Ubah Tanggal:", default_date_obj)
-                # FIX: min_value disetel ke 0 agar bisa di-nol-kan
                 edit_qty = st.number_input("Ubah Nilai Qty (Isi 0 jika ingin mengosongkan di rekap):", min_value=0, step=1, value=int(data_lama['qty']))
                 edit_ket = st.text_input("Ubah Catatan / Keterangan:", value=str(data_lama['keterangan']))
                 
@@ -156,7 +161,7 @@ with tab_edit:
                     st.success(f"🎉 Sukses! Data ID [{id_target}] berhasil diupdate!")
                     st.rerun()
             
-            # --- 🔴 TOMBOL BARU: HAPUS TOTAL DATA DARI DATABASE ---
+            # --- TOMBOL HAPUS DATA ---
             st.markdown("---")
             st.write("### 🗑️ Opsi 2: Hapus Total Baris Data")
             st.warning(f"Tindakan ini akan menghapus permanen data ID [{id_target}] dengan Qty {data_lama['qty']} Pcs dari sistem.")
@@ -164,11 +169,11 @@ with tab_edit:
             if st.button(f"🚨 HAPUS PERMANEN DATA ID [{id_target}]", use_container_width=True):
                 cursor.execute("DELETE FROM transaksi_qc WHERE id = ?", (id_target,))
                 conn.commit()
-                st.error(f"🗑️ Data ID [{id_target}] untuk part {part_pilihan_edit} telah dihapus dari bumi!")
+                st.error(f"🗑️ Data ID [{id_target}] untuk part {part_pilihan_edit} telah dihapus!")
                 st.rerun()
 
 # ==========================================
-# TAB 3: MONITORING & REKAP
+# TAB 3: MONITORING & REKAP (FIX WARNA KONSISTEN)
 # ==========================================
 with tab2:
     df = pd.read_sql_query("SELECT id, tanggal, nama_part, qty, keterangan, area FROM transaksi_qc ORDER BY id ASC", conn)
@@ -212,7 +217,7 @@ with tab2:
         
         filter_angka = st.checkbox("🔍 Hanya Tampilkan Data Berangka (Siap Share WA)", value=False)
         
-        # 1. TAMPILAN TABEL DI WEB (HTML)
+        # --- GENERATE STRUKTUR TABEL WEB HTML ---
         html_tabel = f"<div class='table-responsive'><table class='custom-table'>"
         html_tabel += "<thead><tr><th>NAMA PART</th>"
         for tgl in kolom_tanggal_5_hari:
@@ -220,11 +225,11 @@ with tab2:
         html_tabel += "<th>KETERANGAN</th><th>AREA</th></tr></thead><tbody>"
         
         data_untuk_gambar = []
+        warna_per_baris = []  # Menyimpan riwayat area data aktif agar warna di gambar sinkron
         ada_data_tampil = False
         tanggal_paling_baru = kolom_tanggal_5_hari[-1] if kolom_tanggal_5_hari else None
         
         for _, r in df_final.iterrows():
-            # JIKA NILAI NYA 0 atau KOSONG, AKAN DISARING SAAT CHECKBOX AKTIF
             if filter_angka and tanggal_paling_baru:
                 val_terbaru = r[tanggal_paling_baru]
                 if pd.isna(val_terbaru) or val_terbaru == "-" or val_terbaru == "" or val_terbaru == 0:
@@ -232,9 +237,15 @@ with tab2:
                 
             ada_data_tampil = True
             
-            if r['area'] == "QC PRODUKSI & WAREHOUSE": kelas_warna = "text-kuning"
-            elif r['area'] == "QC PRODUKSI": kelas_warna = "text-merah"
-            else: kelas_warna = "text-hijau"
+            # ATURAN WARNA KONSISTEN KORIDOR HTML WEB
+            if r['area'] == "QC PRODUKSI":
+                kelas_warna = "text-merah"
+            elif r['area'] == "WAREHOUSE":
+                kelas_warna = "text-hijau"
+            else:
+                kelas_warna = "text-kuning"
+                
+            warna_per_baris.append(r['area'])
             
             html_tabel += f"<tr><td class='{kelas_warna}' style='text-align:left;'>{r['nama_part']}</td>"
             
@@ -245,7 +256,6 @@ with tab2:
             baris_gambar = [part_wrapped]
             for tgl in kolom_tanggal_5_hari:
                 val = r[tgl]
-                # LOGIKA BARU: Jika qty bernilai 0, maka ditampilkan sebagai '-' biar bersih
                 val_str = f"{int(val)}" if (not pd.isna(val) and val != "-" and int(val) > 0) else "-"
                 html_tabel += f"<td>{val_str}</td>"
                 baris_gambar.append(val_str)
@@ -262,7 +272,7 @@ with tab2:
             st.markdown(html_tabel, unsafe_allow_html=True)
             
             # ==========================================
-            # GENERATE GAMBAR PNG VIA MATPLOTLIB
+            # GENERATE GAMBAR EXPORT VIA MATPLOTLIB
             # ==========================================
             kolom_gambar = ['NAMA PART'] + kolom_tanggal_5_hari + ['KETERANGAN', 'AREA']
             total_baris_data = len(data_untuk_gambar)
@@ -306,17 +316,20 @@ with tab2:
                     cell.set_facecolor('#111111')
                     cell.set_text_props(color='white')
                     
-                    area_val_raw = df_final.iloc[row-1]['area']
+                    # VALIDASI FIX UTAMA: Mengambil database warna dari baris yang aktif saja
+                    area_val_raw = warna_per_baris[row-1]
+                    
                     if col == 0:
                         cell.set_text_props(horizontalalignment='left')
                         
+                    # ATURAN WARNA KONSISTEN KORIDOR PNG GAMBAR MATPLOTLIB
                     if col == 0 or col == len(kolom_gambar)-1:
-                        if area_val_raw == "QC PRODUKSI & WAREHOUSE":
-                            cell.set_text_props(color='#FFCC00', weight='bold', style='italic')
-                        elif area_val_raw == "QC PRODUKSI":
-                            cell.set_text_props(color='#FF4B4B', weight='bold', style='italic')
+                        if area_val_raw == "QC PRODUKSI":
+                            cell.set_text_props(color='#FF4B4B', weight='bold', style='italic') # Merah
+                        elif area_val_raw == "WAREHOUSE":
+                            cell.set_text_props(color='#00D26A', weight='bold', style='italic') # Hijau
                         else:
-                            cell.set_text_props(color='#00D26A', weight='bold', style='italic')
+                            cell.set_text_props(color='#FFCC00', weight='bold', style='italic') # Kuning
             
             buf = io.BytesIO()
             plt.savefig(buf, format='png', bbox_inches='tight', dpi=200, facecolor=fig.get_facecolor(), edgecolor='none')
@@ -334,7 +347,7 @@ with tab2:
         else:
             st.info("Tidak ada data berangka untuk ditampilkan dengan filter aktif.")
 
-# AREA RESET
+# AREA DATA RESET UTAMA
     st.markdown("---")
     if st.button("🗑️ Kosongkan Seluruh Tabel Monitoring"):
         cursor.execute("DROP TABLE IF EXISTS transaksi_qc")
