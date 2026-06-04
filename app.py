@@ -79,7 +79,8 @@ st.markdown("""
 
 st.title("📊 BEFORE CEK QC")
 
-tab1, tab2 = st.tabs(["📝 INPUT LAPANGAN", "🖥️ MONITORING & REKAP"])
+# REVISI: Menambahkan tab EDIT LAPANGAN di tengah agar alurnya pas
+tab1, tab_edit, tab2 = st.tabs(["📝 INPUT LAPANGAN", "✏️ EDIT DATA LAPANGAN", "🖥️ MONITORING & REKAP"])
 
 # ==========================================
 # TAB 1: FORM INPUT LAPANGAN
@@ -104,7 +105,71 @@ with tab1:
             st.success("Berhasil Tersimpan!")
 
 # ==========================================
-# TAB 2: MONITORING & REKAP (FUNGSI GAMBAR)
+# 🛠️ REVISI BARU - TAB: EDIT DATA LAPANGAN
+# ==========================================
+with tab_edit:
+    st.subheader("✏️ Koreksi & Edit Data Salah Input")
+    
+    # Ambil semua data untuk keperluan tracking edit
+    df_all_edit = pd.read_sql_query("SELECT * FROM transaksi_qc", conn)
+    
+    if df_all_edit.empty:
+        st.info("💡 Belum ada data yang diinput ke dalam database. Sila input data terlebih dahulu di tab sebelah.")
+    else:
+        # Langkah 1: Pilih Part mana yang mau diedit datanya
+        part_pilihan_edit = st.selectbox("1️⃣ Pilih Nama Part yang Ingin Diedit:", LIST_PART, key="select_part_edit")
+        
+        # Filter database hanya menampilkan part pilihan
+        df_filtered_edit = df_all_edit[df_all_edit['nama_part'] == part_pilihan_edit]
+        
+        if df_filtered_edit.empty:
+            st.warning(f"Belum ada riwayat inputan manual untuk part '{part_pilihan_edit}'")
+        else:
+            st.write(f"📋 Riwayat input data untuk **{part_pilihan_edit}**:")
+            # Tampilkan tabel referensi mini agar user tahu ID mana yang mau diubah
+            st.dataframe(df_filtered_edit[['id', 'tanggal', 'qty', 'keterangan', 'area']], use_container_width=True, hide_index=True)
+            
+            st.markdown("---")
+            st.write("### ⚙️ Form Perubahan Data:")
+            
+            # Langkah 2: Pilih ID baris data yang mau dieksekusi edit
+            list_id_tersedia = df_filtered_edit['id'].tolist()
+            id_target = st.selectbox("2️⃣ Pilih Nomor ID Data yang Mau Diubah:", list_id_tersedia)
+            
+            # Ambil data lama sebagai nilai default di form agar operator tinggal ganti yang salah aja
+            data_lama = df_filtered_edit[df_filtered_edit['id'] == id_target].iloc[0]
+            
+            # Jadikan tanggal lama dari string text db ke bentuk objek date python
+            default_date_obj = datetime.strptime(data_lama['tanggal'], "%Y-%m-%d").date()
+            
+            # Form Edit Data
+            with st.form(key="form_edit_proses"):
+                edit_tgl = st.date_input("Ubah Tanggal:", default_date_obj)
+                edit_qty = st.number_input("Ubah Nilai Qty (Pcs):", min_value=1, step=1, value=int(data_lama['qty']))
+                edit_ket = st.text_input("Ubah Catatan / Keterangan:", value=str(data_lama['keterangan']))
+                
+                # Biar selectbox area otomatis terpilih sesuai data lama
+                daftar_area = ["QC PRODUKSI", "WAREHOUSE", "QC PRODUKSI & WAREHOUSE"]
+                idx_default_area = daftar_area.index(data_lama['area']) if data_lama['area'] in daftar_area else 0
+                edit_area = st.selectbox("Ubah Posisi Area:", daftar_area, index=idx_default_area)
+                
+                btn_update = st.form_submit_button("⚡ UPDATE DATA SEKARANG")
+                
+                if btn_update:
+                    ket_edit_caps = edit_ket.upper().strip()
+                    # Eksekusi query UPDATE SQL ke database berdasarkan ID target
+                    cursor.execute("""
+                        UPDATE transaksi_qc 
+                        SET tanggal = ?, qty = ?, keterangan = ?, area = ?
+                        WHERE id = ?
+                    """, (edit_tgl.strftime("%Y-%m-%d"), edit_qty, ket_edit_caps, edit_area, id_target))
+                    conn.commit()
+                    
+                    st.success(f"🎉 Sukses! Data ID [{id_target}] untuk part {part_pilihan_edit} berhasil diubah hakekatnya!")
+                    st.rerun()
+
+# ==========================================
+# TAB 3: MONITORING & REKAP (FUNGSI GAMBAR)
 # ==========================================
 with tab2:
     df = pd.read_sql_query("SELECT id, tanggal, nama_part, qty, keterangan, area FROM transaksi_qc ORDER BY id ASC", conn)
@@ -127,7 +192,11 @@ with tab2:
             
         df_terakhir = df.groupby('nama_part').last().reset_index()
         def ambil_keterangan_terbaru(nama_barang):
-            ket = df_terakhir[df_terakhir['nama_part'] == nama_barang]['keterangan'].values[0]
+            # Cek apakah nama_part ada di tabel rekap terakhir setelah proses filter/edit
+            df_target = df_terakhir[df_terakhir['nama_part'] == nama_barang]
+            if df_target.empty:
+                return "-"
+            ket = df_target['keterangan'].values[0]
             if pd.isna(ket) or str(ket).strip() == "": return "-"
             return str(ket)
 
