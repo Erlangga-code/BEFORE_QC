@@ -79,8 +79,7 @@ st.markdown("""
 
 st.title("📊 BEFORE CEK QC")
 
-# REVISI: Menambahkan tab EDIT LAPANGAN di tengah agar alurnya pas
-tab1, tab_edit, tab2 = st.tabs(["📝 INPUT LAPANGAN", "✏️ EDIT DATA LAPANGAN", "🖥️ MONITORING & REKAP"])
+tab1, tab_edit, tab2 = st.tabs(["📝 INPUT LAPANGAN", "✏️ EDIT & HAPUS DATA", "🖥️ MONITORING & REKAP"])
 
 # ==========================================
 # TAB 1: FORM INPUT LAPANGAN
@@ -105,50 +104,41 @@ with tab1:
             st.success("Berhasil Tersimpan!")
 
 # ==========================================
-# 🛠️ REVISI BARU - TAB: EDIT DATA LAPANGAN
+# 🛠️ TAB 2: EDIT & HAPUS DATA LAPANGAN (REVISI)
 # ==========================================
 with tab_edit:
-    st.subheader("✏️ Koreksi & Edit Data Salah Input")
+    st.subheader("✏️ Koreksi, Jadikan 0, atau Hapus Data")
     
-    # Ambil semua data untuk keperluan tracking edit
     df_all_edit = pd.read_sql_query("SELECT * FROM transaksi_qc", conn)
     
     if df_all_edit.empty:
-        st.info("💡 Belum ada data yang diinput ke dalam database. Sila input data terlebih dahulu di tab sebelah.")
+        st.info("💡 Belum ada data yang diinput ke dalam database.")
     else:
-        # Langkah 1: Pilih Part mana yang mau diedit datanya
-        part_pilihan_edit = st.selectbox("1️⃣ Pilih Nama Part yang Ingin Diedit:", LIST_PART, key="select_part_edit")
-        
-        # Filter database hanya menampilkan part pilihan
+        part_pilihan_edit = st.selectbox("1️⃣ Pilih Nama Part yang Ingin Dikoreksi:", LIST_PART, key="select_part_edit")
         df_filtered_edit = df_all_edit[df_all_edit['nama_part'] == part_pilihan_edit]
         
         if df_filtered_edit.empty:
             st.warning(f"Belum ada riwayat inputan manual untuk part '{part_pilihan_edit}'")
         else:
             st.write(f"📋 Riwayat input data untuk **{part_pilihan_edit}**:")
-            # Tampilkan tabel referensi mini agar user tahu ID mana yang mau diubah
             st.dataframe(df_filtered_edit[['id', 'tanggal', 'qty', 'keterangan', 'area']], use_container_width=True, hide_index=True)
             
             st.markdown("---")
-            st.write("### ⚙️ Form Perubahan Data:")
             
-            # Langkah 2: Pilih ID baris data yang mau dieksekusi edit
             list_id_tersedia = df_filtered_edit['id'].tolist()
-            id_target = st.selectbox("2️⃣ Pilih Nomor ID Data yang Mau Diubah:", list_id_tersedia)
+            id_target = st.selectbox("2️⃣ Pilih Nomor ID Data yang Mau Dieksekusi:", list_id_tersedia)
             
-            # Ambil data lama sebagai nilai default di form agar operator tinggal ganti yang salah aja
             data_lama = df_filtered_edit[df_filtered_edit['id'] == id_target].iloc[0]
-            
-            # Jadikan tanggal lama dari string text db ke bentuk objek date python
             default_date_obj = datetime.strptime(data_lama['tanggal'], "%Y-%m-%d").date()
             
-            # Form Edit Data
+            # --- FORM EDIT (SEKARANG BISA INPUT 0) ---
+            st.write("### ⚙️ Opsi 1: Ganti Data / Ubah Qty Menjadi 0")
             with st.form(key="form_edit_proses"):
                 edit_tgl = st.date_input("Ubah Tanggal:", default_date_obj)
-                edit_qty = st.number_input("Ubah Nilai Qty (Pcs):", min_value=1, step=1, value=int(data_lama['qty']))
+                # FIX: min_value disetel ke 0 agar bisa di-nol-kan
+                edit_qty = st.number_input("Ubah Nilai Qty (Isi 0 jika ingin mengosongkan di rekap):", min_value=0, step=1, value=int(data_lama['qty']))
                 edit_ket = st.text_input("Ubah Catatan / Keterangan:", value=str(data_lama['keterangan']))
                 
-                # Biar selectbox area otomatis terpilih sesuai data lama
                 daftar_area = ["QC PRODUKSI", "WAREHOUSE", "QC PRODUKSI & WAREHOUSE"]
                 idx_default_area = daftar_area.index(data_lama['area']) if data_lama['area'] in daftar_area else 0
                 edit_area = st.selectbox("Ubah Posisi Area:", daftar_area, index=idx_default_area)
@@ -157,19 +147,28 @@ with tab_edit:
                 
                 if btn_update:
                     ket_edit_caps = edit_ket.upper().strip()
-                    # Eksekusi query UPDATE SQL ke database berdasarkan ID target
                     cursor.execute("""
                         UPDATE transaksi_qc 
                         SET tanggal = ?, qty = ?, keterangan = ?, area = ?
                         WHERE id = ?
                     """, (edit_tgl.strftime("%Y-%m-%d"), edit_qty, ket_edit_caps, edit_area, id_target))
                     conn.commit()
-                    
-                    st.success(f"🎉 Sukses! Data ID [{id_target}] untuk part {part_pilihan_edit} berhasil diubah hakekatnya!")
+                    st.success(f"🎉 Sukses! Data ID [{id_target}] berhasil diupdate!")
                     st.rerun()
+            
+            # --- 🔴 TOMBOL BARU: HAPUS TOTAL DATA DARI DATABASE ---
+            st.markdown("---")
+            st.write("### 🗑️ Opsi 2: Hapus Total Baris Data")
+            st.warning(f"Tindakan ini akan menghapus permanen data ID [{id_target}] dengan Qty {data_lama['qty']} Pcs dari sistem.")
+            
+            if st.button(f"🚨 HAPUS PERMANEN DATA ID [{id_target}]", use_container_width=True):
+                cursor.execute("DELETE FROM transaksi_qc WHERE id = ?", (id_target,))
+                conn.commit()
+                st.error(f"🗑️ Data ID [{id_target}] untuk part {part_pilihan_edit} telah dihapus dari bumi!")
+                st.rerun()
 
 # ==========================================
-# TAB 3: MONITORING & REKAP (FUNGSI GAMBAR)
+# TAB 3: MONITORING & REKAP
 # ==========================================
 with tab2:
     df = pd.read_sql_query("SELECT id, tanggal, nama_part, qty, keterangan, area FROM transaksi_qc ORDER BY id ASC", conn)
@@ -192,7 +191,6 @@ with tab2:
             
         df_terakhir = df.groupby('nama_part').last().reset_index()
         def ambil_keterangan_terbaru(nama_barang):
-            # Cek apakah nama_part ada di tabel rekap terakhir setelah proses filter/edit
             df_target = df_terakhir[df_terakhir['nama_part'] == nama_barang]
             if df_target.empty:
                 return "-"
@@ -223,12 +221,10 @@ with tab2:
         
         data_untuk_gambar = []
         ada_data_tampil = False
-        
-        # MENENTUKAN TANGGAL PALING BARU (KOLOM PALING KANAN)
         tanggal_paling_baru = kolom_tanggal_5_hari[-1] if kolom_tanggal_5_hari else None
         
         for _, r in df_final.iterrows():
-            # PERBAIKAN LOGIKA FILTER: Hanya cek isi qty di tanggal paling baru (paling kanan)
+            # JIKA NILAI NYA 0 atau KOSONG, AKAN DISARING SAAT CHECKBOX AKTIF
             if filter_angka and tanggal_paling_baru:
                 val_terbaru = r[tanggal_paling_baru]
                 if pd.isna(val_terbaru) or val_terbaru == "-" or val_terbaru == "" or val_terbaru == 0:
@@ -249,7 +245,8 @@ with tab2:
             baris_gambar = [part_wrapped]
             for tgl in kolom_tanggal_5_hari:
                 val = r[tgl]
-                val_str = f"{int(val)}" if (not pd.isna(val) and val != "-") else "-"
+                # LOGIKA BARU: Jika qty bernilai 0, maka ditampilkan sebagai '-' biar bersih
+                val_str = f"{int(val)}" if (not pd.isna(val) and val != "-" and int(val) > 0) else "-"
                 html_tabel += f"<td>{val_str}</td>"
                 baris_gambar.append(val_str)
                 
@@ -268,7 +265,6 @@ with tab2:
             # GENERATE GAMBAR PNG VIA MATPLOTLIB
             # ==========================================
             kolom_gambar = ['NAMA PART'] + kolom_tanggal_5_hari + ['KETERANGAN', 'AREA']
-            
             total_baris_data = len(data_untuk_gambar)
             tinggi_gambar = total_baris_data * 0.8 + 2.0
             
@@ -285,7 +281,6 @@ with tab2:
             
             jumlah_kolom_tgl = len(kolom_tanggal_5_hari)
             lebar_kolom_tgl = 0.38 / jumlah_kolom_tgl
-            
             custom_col_widths = [0.26] + [lebar_kolom_tgl] * jumlah_kolom_tgl + [0.22, 0.14]
             
             tabel_plot = ax.table(
@@ -312,7 +307,6 @@ with tab2:
                     cell.set_text_props(color='white')
                     
                     area_val_raw = df_final.iloc[row-1]['area']
-                    
                     if col == 0:
                         cell.set_text_props(horizontalalignment='left')
                         
