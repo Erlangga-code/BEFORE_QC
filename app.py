@@ -210,11 +210,12 @@ df_today = df_all[df_all["tanggal"] == today_str]
 parts_today = set(df_today["nama_part"].unique())
 belum_dicek = [p for p in LIST_PART if p not in parts_today]
 
-m1, m2, m3, m4 = st.columns(4)
-m1.metric("📦 Total Part Terdaftar", len(LIST_PART))
-m2.metric("✅ Sudah Dicek Hari Ini", len(LIST_PART) - len(belum_dicek))
-m3.metric("⏳ Belum Dicek Hari Ini", len(belum_dicek))
-m4.metric("🔢 Total Qty Masuk Hari Ini", int(df_today["qty"].sum()))
+with st.expander(f"📊 Ringkasan Hari Ini ({today_str})", expanded=True):
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("📦 Total Part Terdaftar", len(LIST_PART))
+    m2.metric("✅ Sudah Dicek Hari Ini", len(LIST_PART) - len(belum_dicek))
+    m3.metric("⏳ Belum Dicek Hari Ini", len(belum_dicek))
+    m4.metric("🔢 Total Qty Masuk Hari Ini", int(df_today["qty"].sum()))
 
 if belum_dicek:
     with st.expander(f"⚠️ {len(belum_dicek)} part BELUM di-cek hari ini ({today_str})", expanded=False):
