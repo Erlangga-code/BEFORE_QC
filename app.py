@@ -280,34 +280,42 @@ with tab1:
 
     input_tgl = st.date_input("Tanggal", datetime.now(), key=f"tgl_{ver}")
 
-    st.markdown("**Centang part yang ada di cek QC:**")
-    terpilih = []
-    for part in LIST_PART:
-        c_cek, c_qty, c_area, c_ket = st.columns([2.2, 1, 1.6, 2])
-        dicek = c_cek.checkbox(part, key=f"cek_{ver}_{part}")
-        if dicek:
-            qty = c_qty.number_input(
-                "Qty", min_value=1, step=1, value=1,
-                key=f"qty_{ver}_{part}", label_visibility="collapsed",
-            )
-            area = c_area.selectbox(
-                "Area", LIST_AREA,
-                key=f"area_{ver}_{part}", label_visibility="collapsed",
-            )
-            ket = c_ket.text_input(
-                "Keterangan", placeholder="Keterangan (catatan)",
-                key=f"ket_{ver}_{part}", label_visibility="collapsed",
-            )
-            terpilih.append((part, int(qty), area, ket.upper().strip()))
+    st.caption("Centang ✔ part yang dicek, lalu isi Qty, Area, dan Keterangan di baris yang sama.")
 
-    st.write("")
+    df_input = pd.DataFrame({
+        "✔": False,
+        "Part": LIST_PART,
+        "Qty": 1,
+        "Area": LIST_AREA[0],
+        "Keterangan": "",
+    })
+    edited = st.data_editor(
+        df_input,
+        key=f"editor_{ver}",
+        hide_index=True,
+        use_container_width=True,
+        disabled=["Part"],
+        height=min(35 * (len(LIST_PART) + 1) + 3, 440),
+        column_config={
+            "✔": st.column_config.CheckboxColumn("✔", width="small"),
+            "Part": st.column_config.TextColumn("Part", width="medium"),
+            "Qty": st.column_config.NumberColumn("Qty", min_value=1, step=1, width="small"),
+            "Area": st.column_config.SelectboxColumn("Area", options=LIST_AREA, width="medium", required=True),
+            "Keterangan": st.column_config.TextColumn("Keterangan", width="medium"),
+        },
+    )
+    terpilih = edited[edited["✔"] == True]  # noqa: E712
+
     if st.button(
         f"🚀 Simpan {len(terpilih)} Part", use_container_width=True,
-        disabled=not terpilih, type="primary",
+        disabled=terpilih.empty, type="primary",
     ):
         tgl_str = input_tgl.strftime("%Y-%m-%d")
-        for part, qty, area, ket in terpilih:
-            tambah_data(tgl_str, part, qty, ket, area)
+        for _, r in terpilih.iterrows():
+            qty = int(pd.to_numeric(r["Qty"], errors="coerce") or 1)
+            ket = "" if pd.isna(r["Keterangan"]) else str(r["Keterangan"]).upper().strip()
+            area = r["Area"] if r["Area"] in LIST_AREA else LIST_AREA[0]
+            tambah_data(tgl_str, r["Part"], max(qty, 1), ket, area)
         st.session_state.form_ver += 1
         st.toast(f"✅ {len(terpilih)} data berhasil disimpan!", icon="🚀")
         st.rerun()
