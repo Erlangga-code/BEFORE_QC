@@ -11,7 +11,7 @@ import textwrap
 # ==========================================
 COLUMNS = ["id", "tanggal", "nama_part", "qty", "keterangan", "area"]
 
-LIST_PART = [
+PART_AWAL = [
     "Casing Cap", "Bolt Rear", "Reinf 2PK-F4766-00",
     "Boss Footrest 5BP", "REINF - BDJ-F4766",
     "PLATE BOLT - KW2504", "BRACKET SEAT L - BDJ-F4718", "INSERT BRACKET STOPPER",
@@ -161,6 +161,44 @@ def buat_tabel():
 buat_tabel()
 
 
+def buat_tabel_part():
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS master_part (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        nama_part TEXT UNIQUE
+    )
+    """)
+    # seed sekali dari daftar awal kalau tabel masih kosong
+    cursor.execute("SELECT COUNT(*) FROM master_part")
+    if cursor.fetchone()[0] == 0:
+        cursor.executemany(
+            "INSERT OR IGNORE INTO master_part (nama_part) VALUES (?)",
+            [(p,) for p in PART_AWAL],
+        )
+    conn.commit()
+
+
+def load_master_part():
+    rows = cursor.execute("SELECT nama_part FROM master_part ORDER BY id ASC").fetchall()
+    return [r[0] for r in rows]
+
+
+def tambah_part(nama):
+    """Return (ok, pesan). Cek dobel tanpa peduli huruf besar/kecil & spasi ganda."""
+    nama_bersih = " ".join(nama.split())
+    if not nama_bersih:
+        return False, "Nama part tidak boleh kosong."
+    if nama_bersih.lower() in [p.lower() for p in load_master_part()]:
+        return False, f"Part '{nama_bersih}' sudah ada di daftar."
+    cursor.execute("INSERT INTO master_part (nama_part) VALUES (?)", (nama_bersih,))
+    conn.commit()
+    return True, nama_bersih
+
+
+buat_tabel_part()
+LIST_PART = load_master_part()
+
+
 def load_data():
     """Ambil semua data dari tabel SQLite."""
     df = pd.read_sql_query("SELECT * FROM transaksi_qc ORDER BY id ASC", conn)
@@ -234,28 +272,57 @@ tab1, tab_edit, tab2 = st.tabs(["📝 INPUT LAPANGAN", "✏️ EDIT & HAPUS DATA
 # ==========================================
 with tab1:
     st.subheader("Form Operator Lapangan")
-    with st.form(key="form_qc", clear_on_submit=True):
-        col1, col2 = st.columns(2)
-        with col1:
-            input_tgl = st.date_input("Tanggal", datetime.now())
-            input_part = st.selectbox("Nama Part", LIST_PART)
-            input_qty = st.number_input("Quantity (Qty) Baru Masuk", min_value=1, step=1, value=1)
-        with col2:
-            input_area = st.selectbox("Area Posisi Barang", LIST_AREA)
-            input_ket = st.text_input("Keterangan (Catatan)", placeholder="Ketik catatan di sini...")
 
-        submit_button = st.form_submit_button(label="🚀 Simpan Data", use_container_width=True)
-        if submit_button:
-            keterangan_capslock = input_ket.upper().strip()
-            tambah_data(
-                input_tgl.strftime("%Y-%m-%d"),
-                input_part,
-                int(input_qty),
-                keterangan_capslock,
-                input_area,
+    # versi form dipakai di key widget supaya semua input ke-reset setelah simpan
+    if "form_ver" not in st.session_state:
+        st.session_state.form_ver = 0
+    ver = st.session_state.form_ver
+
+    input_tgl = st.date_input("Tanggal", datetime.now(), key=f"tgl_{ver}")
+
+    st.markdown("**Centang part yang ada di cek QC:**")
+    terpilih = []
+    for part in LIST_PART:
+        c_cek, c_qty, c_area, c_ket = st.columns([2.2, 1, 1.6, 2])
+        dicek = c_cek.checkbox(part, key=f"cek_{ver}_{part}")
+        if dicek:
+            qty = c_qty.number_input(
+                "Qty", min_value=1, step=1, value=1,
+                key=f"qty_{ver}_{part}", label_visibility="collapsed",
             )
-            st.toast("✅ Data berhasil disimpan!", icon="🚀")
-            st.rerun()
+            area = c_area.selectbox(
+                "Area", LIST_AREA,
+                key=f"area_{ver}_{part}", label_visibility="collapsed",
+            )
+            ket = c_ket.text_input(
+                "Keterangan", placeholder="Keterangan (catatan)",
+                key=f"ket_{ver}_{part}", label_visibility="collapsed",
+            )
+            terpilih.append((part, int(qty), area, ket.upper().strip()))
+
+    st.write("")
+    if st.button(
+        f"🚀 Simpan {len(terpilih)} Part", use_container_width=True,
+        disabled=not terpilih, type="primary",
+    ):
+        tgl_str = input_tgl.strftime("%Y-%m-%d")
+        for part, qty, area, ket in terpilih:
+            tambah_data(tgl_str, part, qty, ket, area)
+        st.session_state.form_ver += 1
+        st.toast(f"✅ {len(terpilih)} data berhasil disimpan!", icon="🚀")
+        st.rerun()
+
+    st.markdown("---")
+    with st.expander("➕ Tambah Part Baru"):
+        with st.form(key="form_part_baru", clear_on_submit=True):
+            nama_baru = st.text_input("Nama Part Baru", placeholder="Contoh: BRACKET XYZ-1234")
+            if st.form_submit_button("Tambah ke Daftar", use_container_width=True):
+                ok, pesan = tambah_part(nama_baru)
+                if ok:
+                    st.toast(f"✅ Part '{pesan}' ditambahkan!", icon="➕")
+                    st.rerun()
+                else:
+                    st.error(pesan)
 
 # ==========================================
 # TAB 2: EDIT & HAPUS DATA LAPANGAN
