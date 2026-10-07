@@ -444,17 +444,16 @@ with tab2:
 
             df_pivot = df.pivot_table(index='nama_part', columns='tanggal_format', values='qty', aggfunc='sum').reset_index()
 
-            def tentukan_status_area(nama_barang):
-                areas_terpakai = df[df['nama_part'] == nama_barang]['area'].unique()
-                if "QC PRODUKSI & WAREHOUSE" in areas_terpakai or ("QC PRODUKSI" in areas_terpakai and "WAREHOUSE" in areas_terpakai):
-                    return "QC PRODUKSI & WAREHOUSE"
-                elif "QC PRODUKSI" in areas_terpakai:
-                    return "QC PRODUKSI"
-                elif "WAREHOUSE" in areas_terpakai:
-                    return "WAREHOUSE"
-                return "QC PRODUKSI"
+            # input TERBARU per part (urut tanggal, lalu id kalau tanggalnya sama)
+            df_terakhir = df.sort_values(['tanggal_dt', 'id']).groupby('nama_part').last().reset_index()
 
-            df_terakhir = df.sort_values('tanggal_dt').groupby('nama_part').last().reset_index()
+            def tentukan_status_area(nama_barang):
+                # area = area dari input terbaru, bukan gabungan seluruh riwayat
+                df_target = df_terakhir[df_terakhir['nama_part'] == nama_barang]
+                if df_target.empty:
+                    return "QC PRODUKSI"
+                area_terbaru = df_target['area'].values[0]
+                return area_terbaru if area_terbaru in LIST_AREA else "QC PRODUKSI"
 
             def ambil_keterangan_terbaru(nama_barang):
                 df_target = df_terakhir[df_terakhir['nama_part'] == nama_barang]
