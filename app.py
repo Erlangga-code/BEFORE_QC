@@ -282,16 +282,18 @@ with tab1:
 
     st.caption("Centang ✔ part yang dicek, lalu isi Qty, Area, dan Keterangan di baris yang sama.")
 
+    # draft = isian tabel yang diamankan saat tambah part baru (supaya tidak ke-reset)
+    draft = st.session_state.get("draft_input", {})
     df_input = pd.DataFrame({
-        "✔": False,
+        "✔": [draft.get(p, {}).get("✔", False) for p in LIST_PART],
         "Part": LIST_PART,
-        "Qty": 1,
-        "Area": LIST_AREA[0],
-        "Keterangan": "",
+        "Qty": [draft.get(p, {}).get("Qty", 1) for p in LIST_PART],
+        "Area": [draft.get(p, {}).get("Area", LIST_AREA[0]) for p in LIST_PART],
+        "Keterangan": [draft.get(p, {}).get("Keterangan", "") for p in LIST_PART],
     })
     edited = st.data_editor(
         df_input,
-        key=f"editor_{ver}",
+        key=f"editor_{ver}_{len(LIST_PART)}",
         hide_index=True,
         use_container_width=True,
         disabled=["Part"],
@@ -317,6 +319,7 @@ with tab1:
             area = r["Area"] if r["Area"] in LIST_AREA else LIST_AREA[0]
             tambah_data(tgl_str, r["Part"], max(qty, 1), ket, area)
         st.session_state.form_ver += 1
+        st.session_state.pop("draft_input", None)
         st.toast(f"✅ {len(terpilih)} data berhasil disimpan!", icon="🚀")
         st.rerun()
 
@@ -327,6 +330,7 @@ with tab1:
             if st.form_submit_button("Tambah ke Daftar", use_container_width=True):
                 ok, pesan = tambah_part(nama_baru)
                 if ok:
+                    st.session_state["draft_input"] = edited.set_index("Part").to_dict("index")
                     st.toast(f"✅ Part '{pesan}' ditambahkan!", icon="➕")
                     st.rerun()
                 else:
