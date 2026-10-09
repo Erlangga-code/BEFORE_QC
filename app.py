@@ -538,11 +538,20 @@ with tab2:
                 # ==========================================
                 # GENERATE GAMBAR EXPORT VIA MATPLOTLIB
                 # ==========================================
-                kolom_gambar = ['NAMA PART'] + kolom_tanggal_tampil + ['KETERANGAN', 'AREA']
+                # header tanggal dibuat 2 baris ("05-Oct\n2026") supaya tidak mepet antar kolom
+                def _header_tgl(t):
+                    bagian = str(t).rsplit('-', 1)
+                    if len(bagian) == 2 and len(bagian[1]) == 2:
+                        return f"{bagian[0]}\n20{bagian[1]}"
+                    return str(t)
+
+                kolom_gambar = ['NAMA PART'] + [_header_tgl(t) for t in kolom_tanggal_tampil] + ['KETERANGAN', 'AREA']
                 total_baris_data = len(data_untuk_gambar)
                 tinggi_gambar = total_baris_data * 0.8 + 2.0
 
-                fig, ax = plt.subplots(figsize=(14, tinggi_gambar))
+                # gambar dilebarkan otomatis kalau kolom tanggalnya banyak
+                lebar_gambar = 14 + max(0, len(kolom_tanggal_tampil) - 5) * 1.2
+                fig, ax = plt.subplots(figsize=(lebar_gambar, tinggi_gambar))
                 fig.patch.set_facecolor('#111111')
                 ax.set_facecolor('#111111')
                 ax.axis('off')
